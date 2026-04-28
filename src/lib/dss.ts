@@ -1,7 +1,7 @@
 // ==========================
 // 🔥 NORMALISASI SEVERITY
 // ==========================
-const normalizeSeverity = (s: string) => {
+const normalizeSeverity = (s: string = "") => {
     const val = s.toLowerCase();
   
     if (val.includes("tidak")) return "Tidak ada";
@@ -9,19 +9,27 @@ const normalizeSeverity = (s: string) => {
     if (val.includes("sedang")) return "Sedang";
     if (val.includes("berat")) return "Berat";
   
-    return "Sedang";
+    return "Sedang"; // fallback aman
+  };
+  
+  // ==========================
+  // 🔥 PARSE AREA (ANTI ERROR)
+  // ==========================
+  const parseArea = (area: string = "") => {
+    const numbers = area.match(/\d+/g);
+  
+    if (!numbers) return 5;
+  
+    return numbers.reduce((a, b) => a + parseInt(b, 10), 0);
   };
   
   // ==========================
   // 🔥 HITUNG PERSENTASE
   // ==========================
   export const calculatePercentage = (severity: string, area: string) => {
-    const numbers = area?.match(/\d+/g);
+    const sizeRaw = parseArea(area);
   
-    const sizeRaw = numbers
-      ? numbers.reduce((a, b) => a + parseInt(b, 10), 0)
-      : 5;
-  
+    // 🔥 NORMALISASI AREA (lebih smooth)
     let size = 0;
   
     if (sizeRaw <= 5) size = 5;
@@ -83,42 +91,52 @@ const normalizeSeverity = (s: string) => {
   };
   
   // ==========================
-  // 🔥 RISK ANALYSIS
+  // 🔥 RISK ANALYSIS (UPGRADE)
   // ==========================
   export const calculateRisk = (
     severity: string,
     area: string,
     description?: string
   ) => {
-    const numbers = area?.match(/\d+/g);
-  
-    const size = numbers
-      ? numbers.reduce((a, b) => a + parseInt(b, 10), 0)
-      : 5;
-  
+    const size = parseArea(area);
     const sev = normalizeSeverity(severity);
   
+    // 🔥 severity weight (lebih realistis)
     let severityScore = 0;
   
-    if (sev === "Tidak ada") severityScore = 5;
-    else if (sev === "Ringan") severityScore = 25;
-    else if (sev === "Sedang") severityScore = 60;
-    else if (sev === "Berat") severityScore = 85;
-    else severityScore = 80;
+    switch (sev) {
+      case "Tidak ada":
+        severityScore = 5;
+        break;
+      case "Ringan":
+        severityScore = 25;
+        break;
+      case "Sedang":
+        severityScore = 60;
+        break;
+      case "Berat":
+        severityScore = 85;
+        break;
+      default:
+        severityScore = 70;
+    }
   
-    const areaScore = Math.min(100, size * 2);
+    // 🔥 area weight (dibatasi biar tidak over)
+    const areaScore = Math.min(40, size * 1.5);
+  
+    // 🔥 lokasi (lebih aman)
+    const desc = description?.toLowerCase() || "";
   
     let locationScore = 20;
   
-    if (description?.toLowerCase().includes("jalan utama"))
-      locationScore = 90;
-    else if (description?.toLowerCase().includes("jalan besar"))
-      locationScore = 70;
+    if (desc.includes("jalan utama")) locationScore = 40;
+    else if (desc.includes("jalan besar")) locationScore = 30;
   
+    // 🔥 final weighted (lebih balance)
     const risk =
-      severityScore * 0.5 +
-      areaScore * 0.3 +
-      locationScore * 0.2;
+      severityScore * 0.6 +
+      areaScore * 0.25 +
+      locationScore * 0.15;
   
     return Math.round(Math.min(100, risk));
   };
@@ -127,7 +145,7 @@ const normalizeSeverity = (s: string) => {
   // 🔥 RISK LEVEL
   // ==========================
   export const getRiskLevel = (risk: number) => {
-    if (risk >= 75) return "Tinggi";
+    if (risk >= 70) return "Tinggi";
     if (risk >= 40) return "Sedang";
     return "Rendah";
   };
@@ -136,8 +154,8 @@ const normalizeSeverity = (s: string) => {
   // 🔥 RISK RECOMMENDATION
   // ==========================
   export const getRiskRecommendation = (risk: number) => {
-    if (risk >= 75)
-      return "Perbaikan darurat segera (risiko tinggi)";
+    if (risk >= 70)
+      return "Perbaikan darurat segera (risiko kecelakaan tinggi)";
     if (risk >= 40)
       return "Perbaikan dalam waktu dekat";
     return "Monitoring berkala";

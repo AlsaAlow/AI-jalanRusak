@@ -5,6 +5,8 @@ import { DamageMap, type Report } from "@/components/DamageMap";
 import { ReportCard } from "@/components/ReportCard";
 import { ReportFlow } from "@/components/ReportFlow";
 import { StatsDashboard } from "@/components/StatsDashboard";
+import { StatsChart } from "@/components/StatsChart";
+import { RiskWarning } from "@/components/RiskWarning";
 
 // DSS
 import { calculatePercentage, getLevel } from "@/lib/dss";
@@ -53,9 +55,11 @@ const Index = () => {
   // =========================
   const filteredReports = reports.filter((r) => {
     if (filter === "all") return true;
+
     const level = getLevel(
       calculatePercentage(r.severity, r.estimated_area)
     );
+
     return level === filter;
   });
 
@@ -92,6 +96,7 @@ const Index = () => {
             </div>
           </div>
 
+          {/* 🔥 STAT HEADER */}
           <div className="mt-5 grid grid-cols-3 gap-2">
             <Stat label="Tinggi" value={stats.tinggi} accent />
             <Stat label="Sedang" value={stats.sedang} />
@@ -100,10 +105,20 @@ const Index = () => {
         </div>
       </header>
 
+      {/* MAIN */}
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6">
-        <ReportFlow onSaved={load} />
 
+        {/* 🚨 WARNING (PALING PENTING) */}
+        <RiskWarning reports={reports} />
+
+        {/* 📊 DASHBOARD */}
         <StatsDashboard reports={reports} />
+
+        {/* 📊 PIE CHART */}
+        <StatsChart reports={reports} />
+
+        {/* 📥 INPUT */}
+        <ReportFlow onSaved={load} />
 
         {/* 🔥 RANKING */}
         <section className="space-y-3">
@@ -140,7 +155,7 @@ const Index = () => {
           </div>
         </section>
 
-        {/* MAP */}
+        {/* 🗺 MAP */}
         <section className="space-y-3">
           <div className="flex items-center gap-2">
             <MapIcon className="h-5 w-5 text-secondary" />
@@ -154,7 +169,7 @@ const Index = () => {
           </div>
         </section>
 
-        {/* REPORT LIST */}
+        {/* 📋 REPORT LIST */}
         <section className="space-y-3">
           <div className="flex items-center gap-2">
             <ListChecks className="h-5 w-5 text-secondary" />

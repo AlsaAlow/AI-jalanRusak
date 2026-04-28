@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Camera, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -33,6 +33,16 @@ export const ReportFlow = ({ onSaved }: { onSaved: () => void }) => {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // 🔥 cleanup preview (PENTING)
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  // ======================
+  // 🔄 RESET
+  // ======================
   const reset = () => {
     setStep("idle");
     setPreviewUrl(null);
@@ -76,6 +86,11 @@ export const ReportFlow = ({ onSaved }: { onSaved: () => void }) => {
   // 🔍 ANALYZE
   // ======================
   const handleFile = async (f: File) => {
+    if (!f.type.startsWith("image/")) {
+      toast.error("File harus berupa gambar");
+      return;
+    }
+
     setFile(f);
     setPreviewUrl(URL.createObjectURL(f));
     setStep("analyzing");
@@ -99,7 +114,7 @@ export const ReportFlow = ({ onSaved }: { onSaved: () => void }) => {
 
       const base = data as Analysis;
 
-      // 🔥 DSS (frontend only)
+      // 🔥 DSS
       const percentage = calculatePercentage(
         base.severity,
         base.estimated_area
@@ -124,7 +139,7 @@ export const ReportFlow = ({ onSaved }: { onSaved: () => void }) => {
   };
 
   // ======================
-  // 💾 SAVE (FIX DI SINI)
+  // 💾 SAVE
   // ======================
   const handleSave = async () => {
     if (!file || !analysis || !coords) return;
@@ -133,9 +148,9 @@ export const ReportFlow = ({ onSaved }: { onSaved: () => void }) => {
 
     try {
       const ext = file.name.split(".").pop() || "jpg";
-      const path = `${Date.now()}.${ext}`;
+      const path = `${Date.now()}-${Math.random()}.${ext}`;
 
-      // upload
+      // 🔥 UPLOAD
       const { error: uploadError } = await supabase.storage
         .from("damage-photos")
         .upload(path, file);
@@ -146,7 +161,7 @@ export const ReportFlow = ({ onSaved }: { onSaved: () => void }) => {
         .from("damage-photos")
         .getPublicUrl(path);
 
-      // 🔥 INSERT (TANPA DSS FIELD)
+      // 🔥 INSERT
       const { error: insertError } = await supabase
         .from("reports")
         .insert([
@@ -163,6 +178,7 @@ export const ReportFlow = ({ onSaved }: { onSaved: () => void }) => {
       if (insertError) throw insertError;
 
       toast.success("Laporan berhasil disimpan!");
+
       onSaved();
       reset();
     } catch (e) {
@@ -184,7 +200,7 @@ export const ReportFlow = ({ onSaved }: { onSaved: () => void }) => {
       {step === "idle" && (
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="w-full rounded-2xl border p-6"
+          className="w-full rounded-2xl border p-6 hover:bg-muted transition"
         >
           Ambil Foto
         </button>
@@ -194,6 +210,7 @@ export const ReportFlow = ({ onSaved }: { onSaved: () => void }) => {
         ref={fileInputRef}
         type="file"
         className="hidden"
+        accept="image/*"
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) handleFile(f);
@@ -204,7 +221,10 @@ export const ReportFlow = ({ onSaved }: { onSaved: () => void }) => {
       {step === "analyzing" && previewUrl && (
         <div className="space-y-2">
           <img src={previewUrl} className="rounded-xl" />
-          <Loader2 className="animate-spin" />
+          <div className="flex items-center gap-2 text-sm">
+            <Loader2 className="animate-spin" />
+            Menganalisis gambar...
+          </div>
         </div>
       )}
 
@@ -218,10 +238,10 @@ export const ReportFlow = ({ onSaved }: { onSaved: () => void }) => {
             <div>Persentase: {analysis.percentage}%</div>
             <div>Level: {analysis.level}</div>
             <div>Instansi: {analysis.instansi}</div>
-            <div>{analysis.description}</div>
+            <div className="text-xs">{analysis.description}</div>
 
             {coords && (
-              <div className="text-xs">
+              <div className="text-xs opacity-70">
                 {coords.lat}, {coords.lng}
               </div>
             )}
@@ -229,7 +249,7 @@ export const ReportFlow = ({ onSaved }: { onSaved: () => void }) => {
 
           <Button onClick={handleSave} disabled={saving}>
             {saving && <Loader2 className="animate-spin mr-2" />}
-            Simpan
+            Simpan Laporan
           </Button>
         </div>
       )}
