@@ -4,6 +4,12 @@ import type { Report } from "./DamageMap";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import {
+  calculateRisk,
+  getRiskLevel,
+  getRiskRecommendation,
+} from "@/lib/dss";
+
 
 // 🔥 DSS
 import { calculatePercentage, getLevel, getInstansi } from "@/lib/dss";
