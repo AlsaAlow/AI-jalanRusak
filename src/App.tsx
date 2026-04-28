@@ -13,10 +13,13 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+
       <BrowserRouter>
         <Routes>
+          {/* 🔥 HALAMAN UTAMA */}
           <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+
+          {/* 🔥 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
