@@ -6,12 +6,16 @@ import { ReportCard } from "@/components/ReportCard";
 import { ReportFlow } from "@/components/ReportFlow";
 import { StatsDashboard } from "@/components/StatsDashboard";
 
-// 🔥 DSS
+// DSS
 import { calculatePercentage, getLevel } from "@/lib/dss";
 
 const Index = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [filter, setFilter] = useState<
+    "all" | "Rendah" | "Sedang" | "Tinggi"
+  >("all");
 
   const load = async () => {
     const { data, error } = await supabase
@@ -28,25 +32,43 @@ const Index = () => {
   }, []);
 
   // =========================
-  // 🔥 DSS STATS (BARU)
+  // 🔥 DSS STATS
   // =========================
   const stats = reports.reduce(
     (acc, r) => {
-      const percentage = calculatePercentage(
-        r.severity,
-        r.estimated_area
-      );
+      const p = calculatePercentage(r.severity, r.estimated_area);
+      const level = getLevel(p);
 
-      const level = getLevel(percentage);
-
-      if (level === "Tinggi") acc.tinggi += 1;
-      else if (level === "Sedang") acc.sedang += 1;
-      else acc.rendah += 1;
+      if (level === "Tinggi") acc.tinggi++;
+      else if (level === "Sedang") acc.sedang++;
+      else acc.rendah++;
 
       return acc;
     },
     { tinggi: 0, sedang: 0, rendah: 0 }
   );
+
+  // =========================
+  // 🔥 FILTER
+  // =========================
+  const filteredReports = reports.filter((r) => {
+    if (filter === "all") return true;
+    const level = getLevel(
+      calculatePercentage(r.severity, r.estimated_area)
+    );
+    return level === filter;
+  });
+
+  // =========================
+  // 🔥 RANKING (TOP 5)
+  // =========================
+  const topReports = [...reports]
+    .map((r) => ({
+      ...r,
+      percentage: calculatePercentage(r.severity, r.estimated_area),
+    }))
+    .sort((a, b) => (b.percentage ?? 0) - (a.percentage ?? 0))
+    .slice(0, 5);
 
   return (
     <div className="min-h-screen bg-background pb-12">
@@ -61,16 +83,15 @@ const Index = () => {
             </div>
 
             <div>
-              <h1 className="text-xl font-extrabold leading-tight">
+              <h1 className="text-xl font-extrabold">
                 Lapor Jalan Rusak AI
               </h1>
               <p className="text-xs text-secondary-foreground/70">
-                Analisis kerusakan jalan dengan DSS berbasis AI
+                DSS Analisis Kerusakan Jalan
               </p>
             </div>
           </div>
 
-          {/* 🔥 STATS HEADER (DSS) */}
           <div className="mt-5 grid grid-cols-3 gap-2">
             <Stat label="Tinggi" value={stats.tinggi} accent />
             <Stat label="Sedang" value={stats.sedang} />
@@ -79,12 +100,45 @@ const Index = () => {
         </div>
       </header>
 
-      {/* MAIN */}
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6">
         <ReportFlow onSaved={load} />
 
-        {/* 🔥 DASHBOARD DSS (BARU) */}
         <StatsDashboard reports={reports} />
+
+        {/* 🔥 RANKING */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-secondary">
+            🔥 Lokasi Paling Parah
+          </h2>
+
+          <div className="space-y-2">
+            {topReports.map((r, i) => (
+              <div
+                key={r.id}
+                className="flex items-center justify-between rounded-xl bg-card p-3 shadow-card"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="font-bold text-primary">
+                    #{i + 1}
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-semibold">
+                      {r.severity}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {r.estimated_area}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="font-bold text-red-500">
+                  {r.percentage}%
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
 
         {/* MAP */}
         <section className="space-y-3">
@@ -95,7 +149,7 @@ const Index = () => {
             </h2>
           </div>
 
-          <div className="h-72 overflow-hidden rounded-2xl shadow-card">
+          <div className="h-72 rounded-2xl shadow-card overflow-hidden">
             <DamageMap reports={reports} />
           </div>
         </section>
@@ -109,19 +163,39 @@ const Index = () => {
             </h2>
           </div>
 
+          {/* FILTER */}
+          <div className="flex gap-2 flex-wrap">
+            {["all", "Rendah", "Sedang", "Tinggi"].map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f as any)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border
+                ${
+                  filter === f
+                    ? f === "Tinggi"
+                      ? "bg-red-500 text-white"
+                      : f === "Sedang"
+                      ? "bg-yellow-400 text-black"
+                      : f === "Rendah"
+                      ? "bg-green-500 text-white"
+                      : "bg-primary text-secondary"
+                    : "bg-white text-muted-foreground"
+                }`}
+              >
+                {f === "all" ? "Semua" : f}
+              </button>
+            ))}
+          </div>
+
           {loading ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Memuat...
+            <p className="text-center py-8">Memuat...</p>
+          ) : filteredReports.length === 0 ? (
+            <p className="text-center text-muted-foreground">
+              Tidak ada data
             </p>
-          ) : reports.length === 0 ? (
-            <div className="rounded-2xl border-2 border-dashed border-border bg-card p-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                Belum ada laporan. Jadilah yang pertama melaporkan! 🚧
-              </p>
-            </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
-              {reports.map((r) => (
+              {filteredReports.map((r) => (
                 <ReportCard key={r.id} report={r} />
               ))}
             </div>
@@ -132,29 +206,14 @@ const Index = () => {
   );
 };
 
-// 🔥 COMPONENT STAT
-const Stat = ({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: number;
-  accent?: boolean;
-}) => (
+const Stat = ({ label, value, accent }: any) => (
   <div
     className={`rounded-xl p-3 ${
-      accent
-        ? "bg-red-500 text-white"
-        : "bg-white/5 text-secondary-foreground"
+      accent ? "bg-red-500 text-white" : "bg-white/5"
     }`}
   >
-    <div className="text-2xl font-extrabold leading-none">
-      {value}
-    </div>
-    <div className="mt-1 text-[10px] uppercase tracking-wide opacity-70">
-      {label}
-    </div>
+    <div className="text-2xl font-bold">{value}</div>
+    <div className="text-xs">{label}</div>
   </div>
 );
 
