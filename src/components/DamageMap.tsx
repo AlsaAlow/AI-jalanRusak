@@ -1,14 +1,32 @@
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  useMap,
+} from "react-leaflet";
+import { useEffect } from "react";
 import L from "leaflet";
+import "leaflet.heat";
+
 import iconUrl from "leaflet/dist/images/marker-icon.png";
 import iconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
 import shadowUrl from "leaflet/dist/images/marker-shadow.png";
 
 // 🔥 DSS
-import { calculatePercentage, getLevel, getInstansi } from "@/lib/dss";
+import {
+  calculatePercentage,
+  getLevel,
+  getInstansi,
+  calculateRisk,
+} from "@/lib/dss";
 
-// Fix default marker assets in Vite
-L.Icon.Default.mergeOptions({ iconUrl, iconRetinaUrl, shadowUrl });
+// Fix marker Vite
+L.Icon.Default.mergeOptions({
+  iconUrl,
+  iconRetinaUrl,
+  shadowUrl,
+});
 
 export type Report = {
   id: string;
@@ -22,14 +40,57 @@ export type Report = {
   created_at: string;
 };
 
-// 🔥 WARNA BERDASARKAN LEVEL (LEBIH AKURAT DARI SEVERITY)
-const getColor = (level: string) => {
-  if (level === "Tinggi") return "#ef4444"; // merah
-  if (level === "Sedang") return "#f59e0b"; // kuning
-  return "#10b981"; // hijau
+// ==========================
+// 🔥 HEATMAP LAYER (INI YANG KAMU BELUM PUNYA)
+// ==========================
+const HeatmapLayer = ({ reports }: { reports: Report[] }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map || reports.length === 0) return;
+
+    const points = reports.map((r) => {
+      const risk = calculateRisk(
+        r.severity,
+        r.estimated_area,
+        r.description
+      );
+
+      return [r.latitude, r.longitude, risk / 100];
+    });
+
+    const heat = (L as any).heatLayer(points, {
+      radius: 30,
+      blur: 25,
+      maxZoom: 17,
+      gradient: {
+        0.2: "green",
+        0.5: "yellow",
+        0.8: "orange",
+        1.0: "red",
+      },
+    }).addTo(map);
+
+    return () => {
+      map.removeLayer(heat);
+    };
+  }, [map, reports]);
+
+  return null;
 };
 
+// ==========================
+// 🔥 WARNA MARKER
+// ==========================
+const getColor = (level: string) => {
+  if (level === "Tinggi") return "#ef4444";
+  if (level === "Sedang") return "#f59e0b";
+  return "#10b981";
+};
+
+// ==========================
 // 🔥 ICON CUSTOM
+// ==========================
 const makeIcon = (color: string) =>
   L.divIcon({
     className: "",
@@ -45,6 +106,9 @@ const makeIcon = (color: string) =>
     iconAnchor: [11, 11],
   });
 
+// ==========================
+// 🔥 MAIN MAP
+// ==========================
 export const DamageMap = ({ reports }: { reports: Report[] }) => {
   const center: [number, number] =
     reports.length > 0
@@ -63,8 +127,11 @@ export const DamageMap = ({ reports }: { reports: Report[] }) => {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
+      {/* 🔥 HEATMAP */}
+      <HeatmapLayer reports={reports} />
+
+      {/* 🔵 MARKER */}
       {reports.map((r) => {
-        // 🔥 HITUNG DSS
         const percentage = calculatePercentage(
           r.severity,
           r.estimated_area
@@ -81,9 +148,7 @@ export const DamageMap = ({ reports }: { reports: Report[] }) => {
           >
             <Popup>
               <div className="space-y-1 text-sm">
-                <div className="font-bold text-secondary">
-                  {level}
-                </div>
+                <div className="font-bold">{level}</div>
 
                 <div>
                   <b>Persentase:</b> {percentage}%

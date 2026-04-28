@@ -1,29 +1,40 @@
 import { useState } from "react";
-import { MapPin, Clock, Send, Loader2 } from "lucide-react";
+import { MapPin, Clock, Send, Loader2, Trash2 } from "lucide-react";
 import type { Report } from "./DamageMap";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import {
+  calculateRisk,
+  getRiskLevel,
+  getRiskRecommendation,
+} from "@/lib/dss";
+
 
 // 🔥 DSS
 import { calculatePercentage, getLevel, getInstansi } from "@/lib/dss";
 
-// 🔥 STYLE SEVERITY
+// STYLE SEVERITY
 const severityStyle = (s: string) => {
   if (s === "Berat") return "bg-destructive text-destructive-foreground";
   if (s === "Sedang") return "bg-warning text-secondary";
   return "bg-success text-white";
 };
 
-// 🔥 STYLE LEVEL
+// STYLE LEVEL
 const levelStyle = (level: string) => {
   if (level === "Tinggi") return "text-red-600 font-bold";
   if (level === "Sedang") return "text-yellow-500 font-bold";
   return "text-green-600 font-bold";
 };
 
-export const ReportCard = ({ report }: { report: Report }) => {
+export const ReportCard = ({
+  report,
+}: {
+  report: Report;
+}) => {
   const [sending, setSending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const date = new Date(report.created_at).toLocaleString("id-ID", {
     day: "2-digit",
@@ -32,11 +43,12 @@ export const ReportCard = ({ report }: { report: Report }) => {
     minute: "2-digit",
   });
 
-  // 🔥 HITUNG DSS (WAJIB)
+  // 🔥 DSS CALCULATION
   const percentage = calculatePercentage(
     report.severity,
     report.estimated_area
   );
+
   const level = getLevel(percentage);
   const instansi = getInstansi(level);
 
@@ -57,8 +69,6 @@ export const ReportCard = ({ report }: { report: Report }) => {
             latitude: report.latitude,
             longitude: report.longitude,
             photo_url: report.photo_url,
-
-            // 🔥 DSS HASIL HITUNG
             percentage,
             level,
             instansi,
@@ -72,9 +82,38 @@ export const ReportCard = ({ report }: { report: Report }) => {
       toast.success("Laporan terkirim via WhatsApp");
     } catch (e) {
       console.error(e);
-      toast.error(e instanceof Error ? e.message : "Gagal kirim");
+      toast.error("Gagal kirim");
     } finally {
       setSending(false);
+    }
+  };
+
+  // =========================
+  // 🔥 DELETE REPORT
+  // =========================
+  const handleDelete = async () => {
+    const confirmDelete = confirm("Yakin ingin menghapus laporan?");
+    if (!confirmDelete) return;
+
+    setDeleting(true);
+
+    try {
+      const { error } = await supabase
+        .from("reports")
+        .delete()
+        .eq("id", report.id);
+
+      if (error) throw error;
+
+      toast.success("Laporan berhasil dihapus");
+
+      // 🔥 REFRESH HALAMAN
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+      toast.error("Gagal menghapus laporan");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -99,7 +138,7 @@ export const ReportCard = ({ report }: { report: Report }) => {
 
       {/* CONTENT */}
       <div className="space-y-3 p-4 text-sm">
-        {/* DSS INFO */}
+        {/* DSS */}
         <div className="space-y-1">
           <div>
             <b>Persentase:</b> {percentage}%
@@ -123,7 +162,8 @@ export const ReportCard = ({ report }: { report: Report }) => {
         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             <MapPin className="h-3.5 w-3.5" />
-            {report.latitude.toFixed(4)}, {report.longitude.toFixed(4)}
+            {report.latitude.toFixed(4)},{" "}
+            {report.longitude.toFixed(4)}
           </span>
 
           <span className="flex items-center gap-1">
@@ -136,19 +176,37 @@ export const ReportCard = ({ report }: { report: Report }) => {
           Luas: {report.estimated_area}
         </div>
 
-        {/* BUTTON WA */}
-        <Button
-          onClick={handleSend}
-          disabled={sending}
-          className="w-full bg-[#25D366] text-white hover:bg-[#1ebd5a]"
-        >
-          {sending ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Send className="mr-2 h-4 w-4" />
-          )}
-          Kirim via WhatsApp
-        </Button>
+        {/* BUTTONS */}
+        <div className="space-y-2">
+          {/* WA */}
+          <Button
+            onClick={handleSend}
+            disabled={sending}
+            className="w-full bg-[#25D366] text-white hover:bg-[#1ebd5a]"
+          >
+            {sending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="mr-2 h-4 w-4" />
+            )}
+            Kirim via WhatsApp
+          </Button>
+
+          {/* DELETE */}
+          <Button
+            onClick={handleDelete}
+            disabled={deleting}
+            variant="destructive"
+            className="w-full"
+          >
+            {deleting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="mr-2 h-4 w-4" />
+            )}
+            Hapus Laporan
+          </Button>
+        </div>
       </div>
     </article>
   );
