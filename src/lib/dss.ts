@@ -160,3 +160,49 @@ const normalizeSeverity = (s: string = "") => {
       return "Perbaikan dalam waktu dekat";
     return "Monitoring berkala";
   };
+  // ==========================
+// 💰 ESTIMASI BIAYA
+// ==========================
+export const parseAreaToM2 = (area: string): number => {
+  if (!area) return 1;
+
+  // ambil angka dari string (contoh: "2 x 1 m")
+  const nums = area.match(/\d+(\.\d+)?/g);
+
+  if (!nums) return 1;
+
+  const values = nums.map(Number);
+
+  // kalau ada 2 angka → anggap panjang x lebar
+  if (values.length >= 2) {
+    return values[0] * values[1];
+  }
+
+  // kalau cuma 1 angka → anggap luas langsung
+  return values[0];
+};
+
+export const estimateRepairCost = (
+  severity: string,
+  area: string
+) => {
+  const luas = parseAreaToM2(area);
+
+  const percentage = calculatePercentage(severity, area);
+  const level = getLevel(percentage);
+
+  const basePrice = 300_000; // Rp/m2
+
+  let factor = 1;
+
+  if (level === "Sedang") factor = 1.5;
+  if (level === "Tinggi") factor = 2.2;
+
+  const total = Math.round(luas * basePrice * factor);
+
+  return {
+    luas,
+    level,
+    total,
+  };
+};

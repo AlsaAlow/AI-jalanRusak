@@ -4,15 +4,17 @@ import type { Report } from "./DamageMap";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+
+// DSS
 import {
+  calculatePercentage,
+  getLevel,
+  getInstansi,
   calculateRisk,
   getRiskLevel,
   getRiskRecommendation,
+  estimateRepairCost,
 } from "@/lib/dss";
-
-
-// 🔥 DSS
-import { calculatePercentage, getLevel, getInstansi } from "@/lib/dss";
 
 // STYLE SEVERITY
 const severityStyle = (s: string) => {
@@ -28,11 +30,7 @@ const levelStyle = (level: string) => {
   return "text-green-600 font-bold";
 };
 
-export const ReportCard = ({
-  report,
-}: {
-  report: Report;
-}) => {
+export const ReportCard = ({ report }: { report: Report }) => {
   const [sending, setSending] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -43,7 +41,9 @@ export const ReportCard = ({
     minute: "2-digit",
   });
 
-  // 🔥 DSS CALCULATION
+  // =========================
+  // 🔥 DSS
+  // =========================
   const percentage = calculatePercentage(
     report.severity,
     report.estimated_area
@@ -51,6 +51,21 @@ export const ReportCard = ({
 
   const level = getLevel(percentage);
   const instansi = getInstansi(level);
+
+  // 🔥 RISK
+  const risk = calculateRisk(
+    report.severity,
+    report.estimated_area,
+    report.description
+  );
+  const riskLevel = getRiskLevel(risk);
+  const recommendation = getRiskRecommendation(risk);
+
+  // 🔥 ESTIMASI BIAYA
+  const cost = estimateRepairCost(
+    report.severity,
+    report.estimated_area
+  );
 
   // =========================
   // 🔥 SEND WA
@@ -72,6 +87,8 @@ export const ReportCard = ({
             percentage,
             level,
             instansi,
+            risk,
+            recommendation,
           },
         }
       );
@@ -89,7 +106,7 @@ export const ReportCard = ({
   };
 
   // =========================
-  // 🔥 DELETE REPORT
+  // 🔥 DELETE
   // =========================
   const handleDelete = async () => {
     const confirmDelete = confirm("Yakin ingin menghapus laporan?");
@@ -106,8 +123,6 @@ export const ReportCard = ({
       if (error) throw error;
 
       toast.success("Laporan berhasil dihapus");
-
-      // 🔥 REFRESH HALAMAN
       window.location.reload();
     } catch (e) {
       console.error(e);
@@ -153,6 +168,31 @@ export const ReportCard = ({
           </div>
         </div>
 
+        {/* 🔥 RISK INFO */}
+        <div className="rounded-lg bg-red-50 p-2">
+          <div className="text-xs">
+            <b>Risk:</b> {risk} ({riskLevel})
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {recommendation}
+          </div>
+        </div>
+
+        {/* 🔥 ESTIMASI BIAYA */}
+        <div className="rounded-lg bg-green-50 p-2">
+          <div className="text-xs text-muted-foreground">
+            Estimasi Biaya
+          </div>
+
+          <div className="text-lg font-bold text-green-600">
+            Rp {cost.total.toLocaleString("id-ID")}
+          </div>
+
+          <div className="text-xs text-muted-foreground">
+            Luas ± {cost.luas} m²
+          </div>
+        </div>
+
         {/* DESKRIPSI */}
         <p className="text-muted-foreground leading-relaxed">
           {report.description}
@@ -178,7 +218,6 @@ export const ReportCard = ({
 
         {/* BUTTONS */}
         <div className="space-y-2">
-          {/* WA */}
           <Button
             onClick={handleSend}
             disabled={sending}
@@ -192,7 +231,6 @@ export const ReportCard = ({
             Kirim via WhatsApp
           </Button>
 
-          {/* DELETE */}
           <Button
             onClick={handleDelete}
             disabled={deleting}
