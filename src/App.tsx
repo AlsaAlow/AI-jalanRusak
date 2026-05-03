@@ -5,10 +5,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-// 🔥 IMPORT HALAMAN
 import Home from "./pages/Home";
 import About from "./pages/About";
-import Index from "./pages/Index"; // dashboard kamu
+import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -21,16 +20,16 @@ const App = () => (
 
       <BrowserRouter>
         <Routes>
-          {/* 🏠 HOME */}
+          {/* HOME */}
           <Route path="/" element={<Home />} />
 
-          {/* 📊 DASHBOARD */}
+          {/* DASHBOARD */}
           <Route path="/dashboard" element={<Index />} />
 
-          {/* 📄 ABOUT */}
+          {/* ABOUT */}
           <Route path="/about" element={<About />} />
 
-          {/* ❌ 404 */}
+          {/* 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

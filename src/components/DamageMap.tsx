@@ -5,7 +5,7 @@ import {
   Popup,
   useMap,
 } from "react-leaflet";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import L from "leaflet";
 import "leaflet.heat";
 
@@ -21,18 +21,23 @@ import {
   calculateRisk,
 } from "@/lib/dss";
 
-// Fix marker Vite
+// ==========================
+// 🔥 FIX ICON (WAJIB)
+// ==========================
 L.Icon.Default.mergeOptions({
   iconUrl,
   iconRetinaUrl,
   shadowUrl,
 });
 
+// ==========================
+// 🔥 TYPE
+// ==========================
 export type Report = {
   id: string;
   photo_url: string;
   severity: string;
-  estimated_area: string;
+  estimated_area: string | number;
   description: string;
   latitude: number;
   longitude: number;
@@ -41,7 +46,71 @@ export type Report = {
 };
 
 // ==========================
-// 🔥 HEATMAP LAYER (INI YANG KAMU BELUM PUNYA)
+// 🔥 NORMALIZE SEVERITY
+// ==========================
+const normalizeSeverity = (s: string = ""): string => {
+  const val = s.toLowerCase();
+  if (val.includes("ringan")) return "Ringan";
+  if (val.includes("sedang")) return "Sedang";
+  if (val.includes("berat")) return "Berat";
+  return "Sedang";
+};
+
+// ==========================
+// 🔥 PARSE AREA (SAFE)
+// ==========================
+const parseArea = (value: any): number => {
+  if (!value) return 0;
+
+  if (typeof value === "string") {
+    if (value.includes("-")) {
+      const [min, max] = value.split("-").map(Number);
+      return (min + max) / 2 || 0;
+    }
+
+    const cleaned = value.replace(/[^\d.]/g, "");
+    return Number(cleaned) || 0;
+  }
+
+  return Number(value) || 0;
+};
+
+// ==========================
+// 🔥 COLOR
+// ==========================
+const getColor = (level: string) => {
+  if (level === "Tinggi") return "#ef4444";
+  if (level === "Sedang") return "#f59e0b";
+  return "#10b981";
+};
+
+// ==========================
+// 🔥 ICON CACHE (OPTIMAL)
+// ==========================
+const iconCache: Record<string, L.DivIcon> = {};
+
+const getIcon = (color: string) => {
+  if (!iconCache[color]) {
+    iconCache[color] = L.divIcon({
+      className: "",
+      html: `<div style="
+        background:${color};
+        width:22px;
+        height:22px;
+        border-radius:50%;
+        border:3px solid #1F2937;
+        box-shadow:0 2px 6px rgba(0,0,0,0.4)
+      "></div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
+  }
+
+  return iconCache[color];
+};
+
+// ==========================
+// 🔥 HEATMAP FIX (NO DUPLICATE)
 // ==========================
 const HeatmapLayer = ({ reports }: { reports: Report[] }) => {
   const map = useMap();
@@ -50,16 +119,22 @@ const HeatmapLayer = ({ reports }: { reports: Report[] }) => {
     if (!map || reports.length === 0) return;
 
     const points = reports.map((r) => {
-      const risk = calculateRisk(
-        r.severity,
-        r.estimated_area,
-        r.description
-      );
+      let risk = 0;
+
+      try {
+        risk = calculateRisk(
+          normalizeSeverity(r.severity),
+          String(r.estimated_area),
+          r.description
+        );
+      } catch {
+        risk = 0;
+      }
 
       return [r.latitude, r.longitude, risk / 100];
     });
 
-    const heat = (L as any).heatLayer(points, {
+    const heatLayer = (L as any).heatLayer(points, {
       radius: 30,
       blur: 25,
       maxZoom: 17,
@@ -69,10 +144,12 @@ const HeatmapLayer = ({ reports }: { reports: Report[] }) => {
         0.8: "orange",
         1.0: "red",
       },
-    }).addTo(map);
+    });
+
+    heatLayer.addTo(map);
 
     return () => {
-      map.removeLayer(heat);
+      map.removeLayer(heatLayer);
     };
   }, [map, reports]);
 
@@ -80,39 +157,19 @@ const HeatmapLayer = ({ reports }: { reports: Report[] }) => {
 };
 
 // ==========================
-// 🔥 WARNA MARKER
-// ==========================
-const getColor = (level: string) => {
-  if (level === "Tinggi") return "#ef4444";
-  if (level === "Sedang") return "#f59e0b";
-  return "#10b981";
-};
-
-// ==========================
-// 🔥 ICON CUSTOM
-// ==========================
-const makeIcon = (color: string) =>
-  L.divIcon({
-    className: "",
-    html: `<div style="
-      background:${color};
-      width:22px;
-      height:22px;
-      border-radius:50%;
-      border:3px solid #1F2937;
-      box-shadow:0 2px 6px rgba(0,0,0,0.4)
-    "></div>`,
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
-  });
-
-// ==========================
 // 🔥 MAIN MAP
 // ==========================
 export const DamageMap = ({ reports }: { reports: Report[] }) => {
+  const safeReports = reports?.filter(
+    (r) =>
+      r &&
+      !isNaN(r.latitude) &&
+      !isNaN(r.longitude)
+  ) || [];
+
   const center: [number, number] =
-    reports.length > 0
-      ? [reports[0].latitude, reports[0].longitude]
+    safeReports.length > 0
+      ? [safeReports[0].latitude, safeReports[0].longitude]
       : [-6.2088, 106.8456];
 
   return (
@@ -127,14 +184,15 @@ export const DamageMap = ({ reports }: { reports: Report[] }) => {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      {/* 🔥 HEATMAP */}
-      <HeatmapLayer reports={reports} />
+      <HeatmapLayer reports={safeReports} />
 
-      {/* 🔵 MARKER */}
-      {reports.map((r) => {
+      {safeReports.map((r) => {
+        const severity = normalizeSeverity(r.severity);
+        const area = parseArea(r.estimated_area);
+
         const percentage = calculatePercentage(
-          r.severity,
-          r.estimated_area
+          severity,
+          String(area)
         );
 
         const level = getLevel(percentage);
@@ -144,7 +202,7 @@ export const DamageMap = ({ reports }: { reports: Report[] }) => {
           <Marker
             key={r.id}
             position={[r.latitude, r.longitude]}
-            icon={makeIcon(getColor(level))}
+            icon={getIcon(getColor(level))}
           >
             <Popup>
               <div className="space-y-1 text-sm">
@@ -159,7 +217,7 @@ export const DamageMap = ({ reports }: { reports: Report[] }) => {
                 </div>
 
                 <div className="text-muted-foreground">
-                  {r.estimated_area}
+                  Luas: {area} m²
                 </div>
 
                 <img
