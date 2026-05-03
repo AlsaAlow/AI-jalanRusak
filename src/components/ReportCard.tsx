@@ -15,6 +15,16 @@ import {
 import { estimateRoadRepair } from "@/lib/costEstimator";
 
 // =========================
+// 🔥 NORMALIZE
+// =========================
+const normalizeSeverity = (s: string = ""): "Ringan" | "Sedang" | "Berat" => {
+  const val = s.toLowerCase();
+  if (val.includes("berat")) return "Berat";
+  if (val.includes("sedang")) return "Sedang";
+  return "Ringan";
+};
+
+// =========================
 // 🔥 STYLE
 // =========================
 const severityStyle = (s: string) => {
@@ -30,10 +40,10 @@ const levelStyle = (level: string) => {
 };
 
 // =========================
-// 🔥 HANDLING TIME (FINAL)
+// 🔥 HANDLING TIME
 // =========================
 const getHandlingTime = (severity: string) => {
-  const s = severity?.toLowerCase() || "";
+  const s = severity.toLowerCase();
 
   if (s === "berat") {
     return {
@@ -59,11 +69,31 @@ const getHandlingTime = (severity: string) => {
 };
 
 // =========================
+// 🔥 DAMAGE TYPE DETECTOR
+// =========================
+type DamageType = "lubang" | "retak buaya" | "retak" | "alur";
+
+const detectDamageType = (desc: string = "", severity: string): DamageType => {
+  const text = desc.toLowerCase();
+
+  if (text.includes("lubang")) return "lubang";
+  if (text.includes("retak buaya")) return "retak buaya";
+  if (text.includes("alur")) return "alur";
+
+  if (severity === "Berat") return "lubang";
+  if (severity === "Sedang") return "retak buaya";
+
+  return "retak";
+};
+
+// =========================
 // 🔥 MAIN
 // =========================
 export const ReportCard = ({ report }: { report: Report }) => {
   const [sending, setSending] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const severity = normalizeSeverity(report.severity);
 
   const date = new Date(report.created_at).toLocaleString("id-ID", {
     day: "2-digit",
@@ -78,32 +108,28 @@ export const ReportCard = ({ report }: { report: Report }) => {
   const area = parseAreaDSS(report.estimated_area);
 
   // =========================
-  // 🔥 DSS
+  // 🔥 DAMAGE TYPE
   // =========================
-  const percentage = calculatePercentage(report.severity, area);
+  const damageType = detectDamageType(
+    report.description,
+    severity
+  );
+
+  // =========================
+  // 🔥 DSS (FIXED)
+  // =========================
+  const percentage = calculatePercentage(
+    severity,
+    area
+  );
+
   const level = getLevel(percentage);
   const instansi = getInstansi(level);
 
   // =========================
   // 🔥 HANDLING
   // =========================
-  const handling = getHandlingTime(report.severity);
-
-  // =========================
-  // 🔥 DAMAGE TYPE
-  // =========================
-  const mapDamageType = () => {
-    const desc = report.description?.toLowerCase() || "";
-
-    if (desc.includes("lubang")) return "lubang";
-    if (desc.includes("retak buaya")) return "retak buaya";
-    if (desc.includes("alur")) return "alur";
-
-    if (report.severity === "Berat") return "lubang";
-    if (report.severity === "Sedang") return "retak buaya";
-
-    return "retak";
-  };
+  const handling = getHandlingTime(severity);
 
   // =========================
   // 🔥 COST
@@ -111,15 +137,15 @@ export const ReportCard = ({ report }: { report: Report }) => {
   let cost = {
     method: "-",
     pricePerM2: 0,
-    materials: [],
+    materials: [] as string[],
     totalCost: 0,
   };
 
   try {
     cost = estimateRoadRepair({
       roadType: "lentur",
-      damageType: mapDamageType() as any,
-      severity: report.severity?.toLowerCase() as any,
+      damageType,
+      severity: severity.toLowerCase() as "ringan" | "sedang" | "berat",
       area: area || 0,
     });
   } catch (e) {
@@ -133,16 +159,11 @@ export const ReportCard = ({ report }: { report: Report }) => {
     setSending(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke(
+      const { error } = await supabase.functions.invoke(
         "send-fonnte",
         {
           body: {
-            severity: report.severity,
-            estimated_area: report.estimated_area,
-            description: report.description,
-            latitude: report.latitude,
-            longitude: report.longitude,
-            photo_url: report.photo_url,
+            ...report,
             percentage,
             level,
             instansi,
@@ -155,7 +176,7 @@ export const ReportCard = ({ report }: { report: Report }) => {
 
       if (error) throw error;
 
-      toast.success("Laporan terkirim via WhatsApp");
+      toast.success("Laporan terkirim");
     } catch (e) {
       console.error(e);
       toast.error("Gagal kirim");
@@ -180,11 +201,11 @@ export const ReportCard = ({ report }: { report: Report }) => {
 
       if (error) throw error;
 
-      toast.success("Laporan berhasil dihapus");
+      toast.success("Laporan dihapus");
       window.location.reload();
     } catch (e) {
       console.error(e);
-      toast.error("Gagal menghapus laporan");
+      toast.error("Gagal hapus");
     } finally {
       setDeleting(false);
     }
@@ -199,16 +220,16 @@ export const ReportCard = ({ report }: { report: Report }) => {
       <div className="relative">
         <img
           src={report.photo_url}
-          alt="Kerusakan jalan"
+          alt="Kerusakan"
           className="h-44 w-full object-cover"
         />
 
         <span
           className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-bold ${severityStyle(
-            report.severity
+            severity
           )}`}
         >
-          {report.severity}
+          {severity}
         </span>
       </div>
 
@@ -219,22 +240,17 @@ export const ReportCard = ({ report }: { report: Report }) => {
           <div className={levelStyle(level)}>Level: {level}</div>
           <div><b>Instansi:</b> {instansi}</div>
 
-          {/* 🔥 PENANGANAN (FINAL UI) */}
+          {/* HANDLING */}
           <div className="mt-3 rounded-xl border p-3 bg-gray-50">
             <div className="text-xs text-gray-500 mb-2">
               Rekomendasi Penanganan
             </div>
 
-            <div className="flex items-center justify-between">
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-bold ${handling.style}`}
-              >
+            <div className="flex justify-between">
+              <span className={`px-3 py-1 rounded-full text-xs font-bold ${handling.style}`}>
                 {handling.label}
               </span>
-
-              <span className="text-xs text-gray-600">
-                {handling.time}
-              </span>
+              <span className="text-xs">{handling.time}</span>
             </div>
           </div>
         </div>
@@ -257,7 +273,7 @@ export const ReportCard = ({ report }: { report: Report }) => {
 
         {/* AREA */}
         <div className="text-xs font-medium">
-          Luas: {area || 0} m²
+          Luas: {area} m²
         </div>
 
         {/* COST */}
@@ -293,11 +309,7 @@ export const ReportCard = ({ report }: { report: Report }) => {
             disabled={sending}
             className="w-full bg-green-600 text-white"
           >
-            {sending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="mr-2 h-4 w-4" />
-            )}
+            {sending ? <Loader2 className="animate-spin mr-2" /> : <Send className="mr-2" />}
             Kirim via WhatsApp
           </Button>
 
@@ -307,11 +319,7 @@ export const ReportCard = ({ report }: { report: Report }) => {
             variant="destructive"
             className="w-full"
           >
-            {deleting ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="mr-2 h-4 w-4" />
-            )}
+            {deleting ? <Loader2 className="animate-spin mr-2" /> : <Trash2 className="mr-2" />}
             Hapus Laporan
           </Button>
         </div>
