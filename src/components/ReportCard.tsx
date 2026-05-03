@@ -18,7 +18,7 @@ import { estimateRoadRepair } from "@/lib/costEstimator";
 // 🔥 STYLE
 // =========================
 const severityStyle = (s: string) => {
-  if (s === "Berat") return "bg-destructive text-white";
+  if (s === "Berat") return "bg-red-500 text-white";
   if (s === "Sedang") return "bg-yellow-400 text-black";
   return "bg-green-500 text-white";
 };
@@ -27,6 +27,35 @@ const levelStyle = (level: string) => {
   if (level === "Tinggi") return "text-red-600 font-bold";
   if (level === "Sedang") return "text-yellow-500 font-bold";
   return "text-green-600 font-bold";
+};
+
+// =========================
+// 🔥 HANDLING TIME (FINAL)
+// =========================
+const getHandlingTime = (severity: string) => {
+  const s = severity?.toLowerCase() || "";
+
+  if (s === "berat") {
+    return {
+      label: "Darurat",
+      time: "≤ 1-3 hari",
+      style: "bg-red-500 text-white",
+    };
+  }
+
+  if (s === "sedang") {
+    return {
+      label: "Segera",
+      time: "3-7 hari",
+      style: "bg-yellow-400 text-black",
+    };
+  }
+
+  return {
+    label: "Monitoring",
+    time: "1-4 minggu",
+    style: "bg-green-500 text-white",
+  };
 };
 
 // =========================
@@ -44,7 +73,7 @@ export const ReportCard = ({ report }: { report: Report }) => {
   });
 
   // =========================
-  // 🔥 PARSE AREA (FIX UTAMA)
+  // 🔥 AREA
   // =========================
   const area = parseAreaDSS(report.estimated_area);
 
@@ -56,7 +85,12 @@ export const ReportCard = ({ report }: { report: Report }) => {
   const instansi = getInstansi(level);
 
   // =========================
-  // 🔥 MAPPING DAMAGE TYPE
+  // 🔥 HANDLING
+  // =========================
+  const handling = getHandlingTime(report.severity);
+
+  // =========================
+  // 🔥 DAMAGE TYPE
   // =========================
   const mapDamageType = () => {
     const desc = report.description?.toLowerCase() || "";
@@ -72,7 +106,7 @@ export const ReportCard = ({ report }: { report: Report }) => {
   };
 
   // =========================
-  // 🔥 COST ESTIMATION (FIX TOTAL)
+  // 🔥 COST
   // =========================
   let cost = {
     method: "-",
@@ -86,7 +120,7 @@ export const ReportCard = ({ report }: { report: Report }) => {
       roadType: "lentur",
       damageType: mapDamageType() as any,
       severity: report.severity?.toLowerCase() as any,
-      area: area || 0, // 🔥 ANTI NaN
+      area: area || 0,
     });
   } catch (e) {
     console.error("Estimator error:", e);
@@ -112,12 +146,14 @@ export const ReportCard = ({ report }: { report: Report }) => {
             percentage,
             level,
             instansi,
+            handling: handling.label,
+            handling_time: handling.time,
+            total_cost: cost.totalCost,
           },
         }
       );
 
       if (error) throw error;
-      if (data?.success === false) throw new Error(data.error);
 
       toast.success("Laporan terkirim via WhatsApp");
     } catch (e) {
@@ -158,7 +194,7 @@ export const ReportCard = ({ report }: { report: Report }) => {
   // 🔥 UI
   // =========================
   return (
-    <article className="overflow-hidden rounded-2xl bg-card shadow-card">
+    <article className="overflow-hidden rounded-2xl bg-white shadow-lg border">
       {/* IMAGE */}
       <div className="relative">
         <img
@@ -182,15 +218,32 @@ export const ReportCard = ({ report }: { report: Report }) => {
           <div><b>Persentase:</b> {percentage}%</div>
           <div className={levelStyle(level)}>Level: {level}</div>
           <div><b>Instansi:</b> {instansi}</div>
+
+          {/* 🔥 PENANGANAN (FINAL UI) */}
+          <div className="mt-3 rounded-xl border p-3 bg-gray-50">
+            <div className="text-xs text-gray-500 mb-2">
+              Rekomendasi Penanganan
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-bold ${handling.style}`}
+              >
+                {handling.label}
+              </span>
+
+              <span className="text-xs text-gray-600">
+                {handling.time}
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* DESC */}
-        <p className="text-muted-foreground">
-          {report.description}
-        </p>
+        <p className="text-gray-600">{report.description}</p>
 
         {/* META */}
-        <div className="flex gap-3 text-xs text-muted-foreground">
+        <div className="flex gap-3 text-xs text-gray-500">
           <span className="flex items-center gap-1">
             <MapPin className="h-3 w-3" />
             {report.latitude.toFixed(4)}, {report.longitude.toFixed(4)}
@@ -208,8 +261,8 @@ export const ReportCard = ({ report }: { report: Report }) => {
         </div>
 
         {/* COST */}
-        <div className="rounded-xl border p-3 bg-muted/40">
-          <div className="text-xs text-muted-foreground">
+        <div className="rounded-xl border p-3 bg-gray-50">
+          <div className="text-xs text-gray-500">
             Estimasi Perbaikan
           </div>
 
@@ -238,7 +291,7 @@ export const ReportCard = ({ report }: { report: Report }) => {
           <Button
             onClick={handleSend}
             disabled={sending}
-            className="w-full bg-green-500 text-white"
+            className="w-full bg-green-600 text-white"
           >
             {sending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -154,6 +154,8 @@ export const estimateRoadRepair = (
     severity
   );
 
+
+
   // 🔥 TAMBAHAN REALISTIS (10% overhead)
   const overheadFactor = 1.1;
 
@@ -168,3 +170,32 @@ export const estimateRoadRepair = (
     totalCost,
   };
 };
+
+// =========================
+// 🔥 HANDLING TIME (NEW)
+// =========================
+export const getHandlingTime = (severity: string) => {
+    const s = severity.toLowerCase();
+  
+    if (s === "berat") {
+      return {
+        label: "Darurat",
+        time: "≤ 1-3 hari",
+        color: "text-red-500",
+      };
+    }
+  
+    if (s === "sedang") {
+      return {
+        label: "Segera",
+        time: "3-7 hari",
+        color: "text-yellow-500",
+      };
+    }
+  
+    return {
+      label: "Monitoring",
+      time: "1-4 minggu",
+      color: "text-green-500",
+    };
+  };
