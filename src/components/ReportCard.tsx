@@ -4,35 +4,35 @@ import type { Report } from "./DamageMap";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+
 import {
-  calculateRisk,
-  getRiskLevel,
-  getRiskRecommendation,
+  calculatePercentage,
+  getLevel,
+  getInstansi,
+  parseArea as parseAreaDSS,
 } from "@/lib/dss";
 
+import { estimateRoadRepair } from "@/lib/costEstimator";
 
-// 🔥 DSS
-import { calculatePercentage, getLevel, getInstansi } from "@/lib/dss";
-
-// STYLE SEVERITY
+// =========================
+// 🔥 STYLE
+// =========================
 const severityStyle = (s: string) => {
-  if (s === "Berat") return "bg-destructive text-destructive-foreground";
-  if (s === "Sedang") return "bg-warning text-secondary";
-  return "bg-success text-white";
+  if (s === "Berat") return "bg-destructive text-white";
+  if (s === "Sedang") return "bg-yellow-400 text-black";
+  return "bg-green-500 text-white";
 };
 
-// STYLE LEVEL
 const levelStyle = (level: string) => {
   if (level === "Tinggi") return "text-red-600 font-bold";
   if (level === "Sedang") return "text-yellow-500 font-bold";
   return "text-green-600 font-bold";
 };
 
-export const ReportCard = ({
-  report,
-}: {
-  report: Report;
-}) => {
+// =========================
+// 🔥 MAIN
+// =========================
+export const ReportCard = ({ report }: { report: Report }) => {
   const [sending, setSending] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -43,14 +43,54 @@ export const ReportCard = ({
     minute: "2-digit",
   });
 
-  // 🔥 DSS CALCULATION
-  const percentage = calculatePercentage(
-    report.severity,
-    report.estimated_area
-  );
+  // =========================
+  // 🔥 PARSE AREA (FIX UTAMA)
+  // =========================
+  const area = parseAreaDSS(report.estimated_area);
 
+  // =========================
+  // 🔥 DSS
+  // =========================
+  const percentage = calculatePercentage(report.severity, area);
   const level = getLevel(percentage);
   const instansi = getInstansi(level);
+
+  // =========================
+  // 🔥 MAPPING DAMAGE TYPE
+  // =========================
+  const mapDamageType = () => {
+    const desc = report.description?.toLowerCase() || "";
+
+    if (desc.includes("lubang")) return "lubang";
+    if (desc.includes("retak buaya")) return "retak buaya";
+    if (desc.includes("alur")) return "alur";
+
+    if (report.severity === "Berat") return "lubang";
+    if (report.severity === "Sedang") return "retak buaya";
+
+    return "retak";
+  };
+
+  // =========================
+  // 🔥 COST ESTIMATION (FIX TOTAL)
+  // =========================
+  let cost = {
+    method: "-",
+    pricePerM2: 0,
+    materials: [],
+    totalCost: 0,
+  };
+
+  try {
+    cost = estimateRoadRepair({
+      roadType: "lentur",
+      damageType: mapDamageType() as any,
+      severity: report.severity?.toLowerCase() as any,
+      area: area || 0, // 🔥 ANTI NaN
+    });
+  } catch (e) {
+    console.error("Estimator error:", e);
+  }
 
   // =========================
   // 🔥 SEND WA
@@ -89,11 +129,10 @@ export const ReportCard = ({
   };
 
   // =========================
-  // 🔥 DELETE REPORT
+  // 🔥 DELETE
   // =========================
   const handleDelete = async () => {
-    const confirmDelete = confirm("Yakin ingin menghapus laporan?");
-    if (!confirmDelete) return;
+    if (!confirm("Yakin ingin menghapus laporan?")) return;
 
     setDeleting(true);
 
@@ -106,8 +145,6 @@ export const ReportCard = ({
       if (error) throw error;
 
       toast.success("Laporan berhasil dihapus");
-
-      // 🔥 REFRESH HALAMAN
       window.location.reload();
     } catch (e) {
       console.error(e);
@@ -117,6 +154,9 @@ export const ReportCard = ({
     }
   };
 
+  // =========================
+  // 🔥 UI
+  // =========================
   return (
     <article className="overflow-hidden rounded-2xl bg-card shadow-card">
       {/* IMAGE */}
@@ -136,53 +176,69 @@ export const ReportCard = ({
         </span>
       </div>
 
-      {/* CONTENT */}
       <div className="space-y-3 p-4 text-sm">
         {/* DSS */}
-        <div className="space-y-1">
-          <div>
-            <b>Persentase:</b> {percentage}%
-          </div>
-
-          <div className={levelStyle(level)}>
-            Level: {level}
-          </div>
-
-          <div>
-            <b>Instansi:</b> {instansi}
-          </div>
+        <div>
+          <div><b>Persentase:</b> {percentage}%</div>
+          <div className={levelStyle(level)}>Level: {level}</div>
+          <div><b>Instansi:</b> {instansi}</div>
         </div>
 
-        {/* DESKRIPSI */}
-        <p className="text-muted-foreground leading-relaxed">
+        {/* DESC */}
+        <p className="text-muted-foreground">
           {report.description}
         </p>
 
         {/* META */}
-        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+        <div className="flex gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
-            <MapPin className="h-3.5 w-3.5" />
-            {report.latitude.toFixed(4)},{" "}
-            {report.longitude.toFixed(4)}
+            <MapPin className="h-3 w-3" />
+            {report.latitude.toFixed(4)}, {report.longitude.toFixed(4)}
           </span>
 
           <span className="flex items-center gap-1">
-            <Clock className="h-3.5 w-3.5" />
+            <Clock className="h-3 w-3" />
             {date}
           </span>
         </div>
 
-        <div className="text-xs font-medium text-secondary">
-          Luas: {report.estimated_area}
+        {/* AREA */}
+        <div className="text-xs font-medium">
+          Luas: {area || 0} m²
         </div>
 
-        {/* BUTTONS */}
+        {/* COST */}
+        <div className="rounded-xl border p-3 bg-muted/40">
+          <div className="text-xs text-muted-foreground">
+            Estimasi Perbaikan
+          </div>
+
+          <div><b>Metode:</b> {cost.method}</div>
+
+          <div>
+            Harga/m²: Rp {cost.pricePerM2.toLocaleString("id-ID")}
+          </div>
+
+          <div className="mt-2">
+            <b>Material:</b>
+            <ul className="list-disc ml-4 text-xs">
+              {cost.materials.map((m, i) => (
+                <li key={i}>{m}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="font-bold text-green-600 mt-2">
+            Total: Rp {cost.totalCost.toLocaleString("id-ID")}
+          </div>
+        </div>
+
+        {/* BUTTON */}
         <div className="space-y-2">
-          {/* WA */}
           <Button
             onClick={handleSend}
             disabled={sending}
-            className="w-full bg-[#25D366] text-white hover:bg-[#1ebd5a]"
+            className="w-full bg-green-500 text-white"
           >
             {sending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -192,7 +248,6 @@ export const ReportCard = ({
             Kirim via WhatsApp
           </Button>
 
-          {/* DELETE */}
           <Button
             onClick={handleDelete}
             disabled={deleting}
